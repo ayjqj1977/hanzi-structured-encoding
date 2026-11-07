@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuroGlyph 汉字生成模型 · 资产工作台</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg0: #05070f;
+    --bg1: #0b1024;
+    --card: rgba(13, 20, 40, 0.85);
+    --card-border: rgba(0, 240, 255, 0.25);
+    --cyan: #00f0ff;
+    --purple: #a855f7;
+    --pink: #ff5fa2;
+    --text: #cfe6ff;
+    --dim: #7d94b5;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 15% -5%, rgba(0, 240, 255, 0.12), transparent 60%),
+      radial-gradient(1000px 700px at 90% 10%, rgba(168, 85, 247, 0.14), transparent 55%),
+      radial-gradient(800px 500px at 50% 110%, rgba(255, 95, 162, 0.08), transparent 60%),
+      linear-gradient(160deg, var(--bg0), var(--bg1) 45%, #0d1028);
+    min-height: 100vh;
+    padding: 28px 22px 60px;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; }
+
+  /* 标题横幅 */
+  header {
+    text-align: center;
+    padding: 46px 20px 34px;
+    margin-bottom: 30px;
+    border: 1px solid rgba(0, 240, 255, 0.18);
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(0, 240, 255, 0.07), rgba(168, 85, 247, 0.05) 60%, transparent);
+    box-shadow: 0 0 60px rgba(0, 240, 255, 0.10), inset 0 0 40px rgba(0, 240, 255, 0.04);
+    position: relative;
+    overflow: hidden;
+  }
+  header::before, header::after {
+    content: "";
+    position: absolute; width: 260px; height: 260px; border-radius: 50%;
+    filter: blur(90px); opacity: .5; pointer-events: none;
+  }
+  header::before { background: rgba(0, 240, 255, 0.25); top: -120px; left: -60px; }
+  header::after { background: rgba(168, 85, 247, 0.30); bottom: -140px; right: -40px; }
+  h1 {
+    font-size: clamp(26px, 4vw, 44px);
+    font-weight: 800; letter-spacing: 2px;
+    background: linear-gradient(90deg, #00f0ff, #a855f7, #ff5fa2);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .subtitle { margin-top: 14px; color: var(--dim); font-size: 15px; letter-spacing: 1px; }
+  .subtitle b { color: var(--cyan); font-weight: 600; }
+  .chips { margin-top: 18px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+  .chip {
+    padding: 6px 16px; border-radius: 999px; font-size: 12px;
+    border: 1px solid rgba(0, 240, 255, 0.35); color: var(--cyan);
+    background: rgba(0, 240, 255, 0.08); letter-spacing: 1px;
+  }
+  .chip.p { border-color: rgba(168, 85, 247, 0.45); color: #c9a2ff; background: rgba(168, 85, 247, 0.10); }
+  .chip.k { border-color: rgba(255, 95, 162, 0.4); color: #ffb0cf; background: rgba(255, 95, 162, 0.08); }
+
+  /* 网格布局：圆盘/环形类占主导 */
+  .grid { display: grid; gap: 22px; }
+  .g-half { grid-template-columns: 1fr 1fr; }
+  .g-main { grid-template-columns: 1.15fr 1fr; }
+  .g-full { grid-template-columns: 1fr; }
+  @media (max-width: 900px) { .g-half, .g-main { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 18px 18px 12px;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45), 0 0 24px rgba(0, 240, 255, 0.06);
+    backdrop-filter: blur(6px);
+    display: flex; flex-direction: column;
+  }
+  .card-title {
+    font-size: 17px; font-weight: 700; letter-spacing: 1px;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 4px;
+  }
+  .card-title::before {
+    content: ""; width: 6px; height: 18px; border-radius: 3px;
+    background: linear-gradient(180deg, var(--cyan), var(--purple));
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.7);
+  }
+  .card-desc { font-size: 12.5px; color: var(--dim); margin-bottom: 8px; line-height: 1.6; }
+  .chart { width: 100%; min-height: 300px; flex: 1; }
+  .chart.tall { min-height: 380px; }
+
+  /* 结论标注 */
+  .verdict {
+    margin-top: 10px; padding: 12px 16px; border-radius: 14px; font-size: 13.5px; line-height: 1.7;
+    border: 1px solid rgba(0, 240, 255, 0.4);
+    background: linear-gradient(90deg, rgba(0, 240, 255, 0.10), rgba(168, 85, 247, 0.12));
+    color: #e6f9ff;
+  }
+  .verdict b { color: var(--cyan); }
+
+  /* 仓库卡片 */
+  .repo-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .repo-cards { grid-template-columns: 1fr; } }
+  .repo {
+    border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 18px; padding: 14px 16px 6px;
+    background: linear-gradient(160deg, rgba(168, 85, 247, 0.08), rgba(13, 20, 40, 0.9));
+    display: flex; flex-direction: column;
+  }
+  .repo h3 { font-size: 15px; color: #c9a2ff; letter-spacing: 0.5px; word-break: break-all; }
+  .repo .size { font-size: 12px; color: var(--dim); margin: 4px 0 2px; }
+  .repo .nums { display: flex; gap: 14px; font-size: 12.5px; color: var(--text); padding: 8px 2px; }
+  .repo .nums span { display: inline-flex; align-items: center; gap: 5px; }
+  .repo .nums .dot { color: var(--cyan); font-weight: 700; }
+  .repo .chart { min-height: 90px; }
+
+  /* 小说板块 */
+  .novel-intro { font-size: 13px; line-height: 1.8; color: var(--text); }
+  .novel-list { margin: 6px 0 0 4px; padding-left: 18px; list-style: none; }
+  .novel-list li { padding: 4px 0; }
+  .novel-list b { font-weight: 700; }
+  .c-cyan { color: var(--cyan); }
+  .c-purple { color: #c9a2ff; }
+  .c-pink { color: #ffb0cf; }
+  .c-gold { color: #ffd166; }
+
+  /* 分类明细表 */
+  .mini-table { font-size: 12.5px; }
+  .mini-table th, .mini-table td { padding: 8px 10px; }
+  .mini-table td:first-child { color: #a8d8ff; font-weight: 600; white-space: nowrap; }
+
+  /* 资产表 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid rgba(0, 240, 255, 0.12); }
+  th { color: var(--cyan); font-weight: 600; letter-spacing: 1px; background: rgba(0, 240, 255, 0.05); }
+  tr:hover td { background: rgba(0, 240, 255, 0.04); }
+  td code { color: #a8d8ff; font-size: 12.5px; word-break: break-all; }
+  .storage-note {
+    margin-top: 12px; font-size: 12.5px; color: var(--dim);
+    padding: 10px 14px; border-radius: 12px; border: 1px dashed rgba(0, 240, 255, 0.3);
+  }
+  footer { margin-top: 34px; text-align: center; font-size: 12px; color: var(--dim); letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 标题横幅 -->
+  <header>
+    <h1>NeuroGlyph 汉字生成模型 · 资产工作台</h1>
+    <div class="subtitle">创作者 <b>ayjqj1977</b> · 汉字结构化编码 &amp; AI 向量模型实验 · 数据截至 2026-11-07</div>
+    <div class="chips">
+      <span class="chip">18 维编码</span>
+      <span class="chip p">34 维字形 + 64 维语义</span>
+      <span class="chip k">HZK32 点阵</span>
+      <span class="chip">消融实验</span>
+      <span class="chip p">云端训练</span>
+      <span class="chip k">本地推理</span>
+    </div>
+  </header>
+
+  <!-- 模型家族圆盘 -->
+  <div class="grid g-full">
+    <div class="card">
+      <div class="card-title">模型家族圆盘 · 权重体积一览</div>
+      <div class="card-desc">四个汉字生成模型家族的已训练权重体积（MB），环形面积代表模型规模；NeuroGlyph-34 以 V10 最优检查点为准。</div>
+      <div id="chart-family" class="chart tall"></div>
+    </div>
+  </div>
+
+  <!-- 消融对比 -->
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-title">消融对比 · 困惑度 PPL 仪表盘</div>
+      <div class="card-desc">96 维纯随机可训练嵌入 vs 主模型（34 维冻结字形 + 64 维可训语义），PPL 越低越好。</div>
+      <div id="chart-ppl" class="chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">消融对比 · 形近字判别进度环</div>
+      <div class="card-desc">18 对形近字（己/已、未/末、大/太 等）余弦判别正确率。</div>
+      <div id="chart-shape" class="chart"></div>
+      <div class="verdict"><b>结论：96 纯随机全面优于主模型。</b>PPL 9.66 &lt; 10.07，形近字判别 18/18 &gt; 17/18，生成文本更通顺、主题更稳定；冻结的 34 维占维度预算但不参与梯度，实为"拖累"，仅保留正则化作用。</div>
+    </div>
+  </div>
+
+  <!-- 编码结构 -->
+  <div class="grid g-full">
+    <div class="card">
+      <div class="card-title">汉字编码结构 · 演进圆环</div>
+      <div class="card-desc">三阶段演进圆环（由内到外）：18 维早期纯规则编码 → 34 维结构化编码（冻结查表，不参与梯度）→ 64 维随机语义嵌入（可训练），最终融合为 98 维模型输入。</div>
+      <div id="chart-encode" class="chart tall"></div>
+    </div>
+  </div>
+
+  <!-- 小说《珠崖铃声》 -->
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-title">小说《珠崖铃声》 · 资产构成</div>
+      <div class="card-desc">汉朝海南题材长篇历史小说，当前版本已迭代至 v35+；已整理进 GitHub 仓库 zhuyaling-novel（CC BY-NC-ND 4.0，仓库体积 12450 KB）。下方圆盘为四类创作资产模块的示意分布。</div>
+      <div id="chart-novel" class="chart tall"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">作品简介</div>
+      <div class="card-desc novel-intro">
+        《珠崖铃声》以汉代珠崖郡（今海南）为舞台的长篇历史小说。作者 ayqjq1977 长期打磨，以历史考据为骨、人物命运为线，逐版迭代至今 v35+。
+        <br><br>配套创作资产完整，四类模块协同支撑：
+        <ul class="novel-list">
+          <li><b class="c-cyan">最终版正文</b> — 可对外发布的最新章节全稿</li>
+          <li><b class="c-purple">创作母本</b> — 素材库、历史考据与设定沉淀</li>
+          <li><b class="c-pink">长篇骨架</b> — 卷章结构、情节大纲与角色关系</li>
+          <li><b class="c-gold">创意方案书</b> — 含配乐与预告片设想的整体包装方案</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 点阵进度 -->
+  <div class="grid g-half">
+    <div class="card">
+      <div class="card-title">HZK32 点阵 · 「中」字活跃度进度环</div>
+      <div class="card-desc">32×32 = 1024 点中，「中」字共 180 个活跃点（17.6%），取自扩展版 HZK32 字库（1,046,790 字节）。</div>
+      <div id="chart-hzk" class="chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">GitHub 仓库仪表盘</div>
+      <div class="card-desc">原创资产仓库（ayjqj1977），数据截至 2026-11-07。</div>
+      <div class="repo-cards">
+        <div class="repo">
+          <h3>hanzi-structured-encoding</h3>
+          <div class="size">仓库体积 4182 KB</div>
+          <div id="chart-repo1" class="chart"></div>
+          <div class="nums"><span><i class="dot">★</i> 0 star</span><span>⑂ 0 fork</span><span>◉ 0 watch</span></div>
+        </div>
+        <div class="repo">
+          <h3>zhuyaling-novel</h3>
+          <div class="size">仓库体积 12450 KB</div>
+          <div id="chart-repo2" class="chart"></div>
+          <div class="nums"><span><i class="dot">★</i> 0 star</span><span>⑂ 0 fork</span><span>◉ 0 watch</span></div>
+        </div>
+        <div class="repo">
+          <h3>python-scripts</h3>
+          <div class="size">仓库体积 592 KB</div>
+          <div id="chart-repo3" class="chart"></div>
+          <div class="nums"><span><i class="dot">★</i> 0 star</span><span>⑂ 0 fork</span><span>◉ 0 watch</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Python 小程序分类 -->
+  <div class="grid g-main">
+    <div class="card">
+      <div class="card-title">Python 小程序 · 分类圆盘</div>
+      <div class="card-desc">勘察 <code>D:\desktop\学习结果小文件</code> 及桌面个人脚本，排除第三方环境后共 <b>318 个原创/项目 py</b>（与历史"约 283 个、曾推送 python-scripts 仓库"为同一批资产）。圆盘展示四类归属。</div>
+      <div id="chart-pycat" class="chart tall"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">分类明细</div>
+      <div class="card-desc">按目录与功能归类（数字来自勘察清单，带"约"为统计口径）。</div>
+      <table class="mini-table">
+        <thead><tr><th>类别</th><th>数量</th><th>代表内容</th></tr></thead>
+        <tbody>
+          <tr><td>汉字编码与模型研究</td><td>约 110</td><td>18/34 维编码、NeuroGlyph 系列、点阵字形实验、训练/语料管线</td></tr>
+          <tr><td>个人工具脚本（99_其他Python文件）</td><td>88</td><td>数学 19 · 图形 22 · 生活 11 · AI 7 · 游戏 2 · 姓名 6 · 文件整理 8 · 未分类 13</td></tr>
+          <tr><td>个人归档与桌面工具</td><td>8</td><td>健康/排班分析、书签清理</td></tr>
+          <tr><td>过程版本与变体</td><td>约 112</td><td>train_extended 系列、test_* 小测试、cleanup_bookmarks 旧版</td></tr>
+        </tbody>
+      </table>
+      <div class="verdict">上架评估：<b>强烈推荐改造 6 个</b>（hzk32_reader、Ollama MCP 服务、unified_embedding、商品价格管理、CSV 美化、文件整理）｜可改造 12 个｜其余为学习示例/趣味练习/项目资产，建议随开源仓库整体保留。</div>
+    </div>
+  </div>
+
+  <!-- 资产清单 -->
+  <div class="grid g-full">
+    <div class="card">
+      <div class="card-title">本地模型资产清单</div>
+      <div class="card-desc">核心权重文件与用途，存放于本地 <code>D:\desktop\学习结果小文件</code> 并有百度网盘备份。</div>
+      <table>
+        <thead>
+          <tr><th>文件</th><th>大小</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>ablation\best_model.pt</code></td><td>368,978,859 B</td><td>96 纯随机消融模型（最佳，PPL 9.66）</td></tr>
+          <tr><td><code>neuroglyph34_cloud_v12\latest.pt</code></td><td>369,041,963 B</td><td>V12 主模型（34+64，PPL 10.07）</td></tr>
+          <tr><td><code>ablation\latest.pt</code></td><td>368,971,883 B</td><td>96 纯随机消融模型（最终步）</td></tr>
+          <tr><td><code>neuroglyph34_cloud_v10\best_val_ppl13.55_step33480.pt</code></td><td>512,783,722 B</td><td>V10 最优检查点（配套最全，可推理演示）</td></tr>
+          <tr><td><code>dotmatrix_glyph_spatial\checkpoints_spatial\ckpt_step050000.pt</code></td><td>544,945,590 B</td><td>点阵空间感知模型（最新）</td></tr>
+          <tr><td><code>dotmatrix_glyph\checkpoints_pointnet\ckpt_step045000.pt</code></td><td>535,498,662 B</td><td>点阵编码模型（最新）</td></tr>
+          <tr><td><code>neuroglyph18\neuroglyph18_final (1).pth</code></td><td>31,355,462 B</td><td>NeuroGlyph-18 最终版权重</td></tr>
+          <tr><td><code>dotmatrix_glyph\HZK32</code></td><td>1,046,790 B</td><td>32×32 点阵字库（扩展版）</td></tr>
+          <tr><td><code>neuroglyph34_cloud_v10\char_to_idx.json</code></td><td>102,514 B</td><td>V10 词表（7987 字）</td></tr>
+          <tr><td><code>neuroglyph34_cloud_v10\embedding_matrix.npy</code></td><td>1,086,360 B</td><td>34 维字形嵌入矩阵（冻结查表）</td></tr>
+        </tbody>
+      </table>
+      <div class="storage-note">存储位置：本地 <b>D:\desktop\学习结果小文件</b>（按版本分目录保存）+ 百度网盘备份；训练在云端 AutoDL 多 GPU 完成，本机 venv_ai 为 torch 2.9.1+cpu，可做 CPU 推理。</div>
+    </div>
+  </div>
+
+  <footer>NeuroGlyph Asset Dashboard · 由本地调研数据生成 · 数据截至 2026-11-07</footer>
+</div>
+
+<script>
+  const CYAN = '#00f0ff', PURPLE = '#a855f7', PINK = '#ff5fa2', DARK = '#0b1024', TEXT = '#cfe6ff', DIM = '#7d94b5';
+  const AXIS = { axisLabel: { color: DIM }, splitLine: { lineStyle: { color: 'rgba(127,148,181,0.15)' } } };
+  function baseGrid() { return { left: 12, right: 16, top: 24, bottom: 14, containLabel: true }; }
+
+  /* 1. 模型家族圆盘 */
+  const family = echarts.init(document.getElementById('chart-family'));
+  family.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}<br/>权重体积：{c} MB（{d}%）' },
+    legend: { bottom: 0, textStyle: { color: DIM }, itemWidth: 14, itemHeight: 8 },
+    graphic: [
+      { type: 'text', left: 'center', top: '38%', style: { text: '4 大家族', fill: '#e6f9ff', fontSize: 20, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '48%', style: { text: '共 1,623 MB\n权重资产', fill: CYAN, fontSize: 13, textAlign: 'center', lineHeight: 20 } }
+    ],
+    series: [{
+      type: 'pie',
+      radius: ['38%', '72%'],
+      center: ['50%', '46%'],
+      padAngle: 3,
+      itemStyle: { borderRadius: 10, borderColor: DARK, borderWidth: 3 },
+      label: { color: TEXT, fontSize: 12.5, formatter: '{b}\n{c} MB' },
+      labelLine: { lineStyle: { color: 'rgba(0,240,255,0.5)' } },
+      data: [
+        { value: 31,  name: 'NeuroGlyph-18', itemStyle: { color: CYAN } },
+        { value: 512, name: 'NeuroGlyph-34 V2~V12（V10 最优）', itemStyle: { color: PURPLE } },
+        { value: 535, name: 'PointMatrix 点阵', itemStyle: { color: PINK } },
+        { value: 545, name: 'PointMatrixSpatial', itemStyle: { color: '#22d3ee' } }
+      ]
+    }]
+  });
+
+  /* 2a. 消融 PPL 仪表盘 */
+  const ppl = echarts.init(document.getElementById('chart-ppl'));
+  ppl.setOption({
+    tooltip: { formatter: '{a}<br/>{b}：{c}' },
+    series: [
+      {
+        name: 'PPL 对比', type: 'gauge', min: 0, max: 20, splitNumber: 5, radius: '92%',
+        center: ['30%', '58%'], startAngle: 210, endAngle: -30,
+        progress: { show: true, width: 14, itemStyle: { color: PURPLE } },
+        axisLine: { lineStyle: { width: 14, color: [[1, 'rgba(127,148,181,0.15)']] } },
+        axisTick: { show: false }, splitLine: { show: false }, pointer: { show: false },
+        anchor: { show: false },
+        axisLabel: { show: false },
+        detail: { valueAnimation: true, formatter: '{value}', color: PURPLE, fontSize: 34, fontWeight: 700, offsetCenter: [0, '68%'] },
+        data: [{ value: 9.66, name: '96 纯随机（消融）' }],
+        title: { show: true, offsetCenter: [0, '96%'], color: '#c9a2ff', fontSize: 13 }
+      },
+      {
+        name: 'PPL 对比', type: 'gauge', min: 0, max: 20, splitNumber: 5, radius: '92%',
+        center: ['70%', '58%'], startAngle: 210, endAngle: -30,
+        progress: { show: true, width: 14, itemStyle: { color: CYAN } },
+        axisLine: { lineStyle: { width: 14, color: [[1, 'rgba(127,148,181,0.15)']] } },
+        axisTick: { show: false }, splitLine: { show: false }, pointer: { show: false }, anchor: { show: false },
+        axisLabel: { show: false },
+        detail: { valueAnimation: true, formatter: '{value}', color: CYAN, fontSize: 34, fontWeight: 700, offsetCenter: [0, '68%'] },
+        data: [{ value: 10.07, name: 'V12 主模型（34+64）' }],
+        title: { show: true, offsetCenter: [0, '96%'], color: '#a8d8ff', fontSize: 13 }
+      },
+      {
+        type: 'pie', radius: ['16%', '26%'], center: ['50%', '50%'],
+        silent: true, label: { show: false },
+        itemStyle: { borderColor: DARK, borderWidth: 2 },
+        data: [{ value: 1, itemStyle: { color: PURPLE } }, { value: 1, itemStyle: { color: 'rgba(127,148,181,0.2)' } }]
+      }
+    ]
+  });
+
+  /* 2b. 形近字判别进度环 */
+  const shape = echarts.init(document.getElementById('chart-shape'));
+  shape.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}<br/>{c}' },
+    legend: { bottom: 0, textStyle: { color: DIM }, itemWidth: 14, itemHeight: 8 },
+    series: [
+      {
+        type: 'pie', radius: ['46%', '74%'], center: ['27%', '46%'], padAngle: 2,
+        itemStyle: { borderRadius: 8, borderColor: DARK, borderWidth: 2 },
+        label: { show: true, position: 'center', formatter: '18/18\n正确率 100%', color: PURPLE, fontSize: 13, fontWeight: 700, lineHeight: 20 },
+        data: [
+          { value: 18, name: '96 纯随机 · 正确', itemStyle: { color: PURPLE } },
+          { value: 0, name: '96 纯随机 · 错误', itemStyle: { color: 'rgba(127,148,181,0.2)' } }
+        ]
+      },
+      {
+        type: 'pie', radius: ['46%', '74%'], center: ['73%', '46%'], padAngle: 2,
+        itemStyle: { borderRadius: 8, borderColor: DARK, borderWidth: 2 },
+        label: { show: true, position: 'center', formatter: '17/18\n正确率 94.4%', color: CYAN, fontSize: 13, fontWeight: 700, lineHeight: 20 },
+        data: [
+          { value: 17, name: 'V12 主模型 · 正确', itemStyle: { color: CYAN } },
+          { value: 1, name: 'V12 主模型 · 错误', itemStyle: { color: 'rgba(127,148,181,0.2)' } }
+        ]
+      }
+    ],
+    graphic: [
+      { type: 'text', left: '27%', top: '72%', style: { text: '96 纯随机', fill: '#c9a2ff', fontSize: 12.5, textAlign: 'center' } },
+      { type: 'text', left: '73%', top: '72%', style: { text: 'V12 主模型', fill: '#a8d8ff', fontSize: 12.5, textAlign: 'center' } }
+    ]
+  });
+
+  /* 3. 编码结构演进圆环（三层同心圆环：18 → 34 → 64） */
+  const encode = echarts.init(document.getElementById('chart-encode'));
+  encode.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}<br/>维度：{c} 维' },
+    legend: { bottom: 0, textStyle: { color: DIM }, itemWidth: 14, itemHeight: 8 },
+    graphic: [
+      { type: 'text', left: 'center', top: '36%', style: { text: '98 维\n融合输入', fill: '#e6f9ff', fontSize: 20, fontWeight: 700, textAlign: 'center', lineHeight: 26 } },
+      { type: 'text', left: 'center', top: '50%', style: { text: '18 + 34 + 64', fill: CYAN, fontSize: 13, textAlign: 'center' } }
+    ],
+    series: [
+      {
+        type: 'pie', radius: ['18%', '34%'], center: ['50%', '46%'], padAngle: 3,
+        itemStyle: { borderRadius: 8, borderColor: DARK, borderWidth: 2 },
+        label: { show: false },
+        data: [{ value: 18, name: '18 维早期编码', itemStyle: { color: '#22d3ee' } }]
+      },
+      {
+        type: 'pie', radius: ['40%', '56%'], center: ['50%', '46%'], padAngle: 3,
+        itemStyle: { borderRadius: 8, borderColor: DARK, borderWidth: 2 },
+        label: { show: false },
+        data: [{ value: 34, name: '34 维结构化编码（冻结）', itemStyle: { color: PURPLE } }]
+      },
+      {
+        type: 'pie', radius: ['62%', '78%'], center: ['50%', '46%'], padAngle: 3,
+        itemStyle: { borderRadius: 8, borderColor: DARK, borderWidth: 2 },
+        label: { show: false },
+        data: [{ value: 64, name: '64 维随机语义（可训）', itemStyle: { color: PINK } }]
+      }
+    ]
+  });
+
+  /* 3b. 小说《珠崖铃声》资产构成圆盘 */
+  const novel = echarts.init(document.getElementById('chart-novel'));
+  novel.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}<br/>{c}' },
+    legend: { bottom: 0, textStyle: { color: DIM }, itemWidth: 14, itemHeight: 8 },
+    graphic: [
+      { type: 'text', left: 'center', top: '40%', style: { text: '《珠崖铃声》', fill: '#e6f9ff', fontSize: 16, fontWeight: 700, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '49%', style: { text: 'v35+ · 四模块', fill: '#ffd166', fontSize: 12.5, textAlign: 'center' } }
+    ],
+    series: [{
+      type: 'pie', radius: ['36%', '70%'], center: ['50%', '46%'], padAngle: 3,
+      itemStyle: { borderRadius: 10, borderColor: DARK, borderWidth: 3 },
+      label: { color: TEXT, fontSize: 12, formatter: '{b}\n{c}' },
+      labelLine: { lineStyle: { color: 'rgba(0,240,255,0.45)' } },
+      data: [
+        { value: 1, name: '最终版正文', itemStyle: { color: CYAN } },
+        { value: 1, name: '创作母本', itemStyle: { color: PURPLE } },
+        { value: 1, name: '长篇骨架', itemStyle: { color: PINK } },
+        { value: 1, name: '创意方案书', itemStyle: { color: '#ffd166' } }
+      ]
+    }]
+  });
+
+  /* 3c. Python 小程序分类圆盘 */
+  const pycat = echarts.init(document.getElementById('chart-pycat'));
+  pycat.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}<br/>{c} 个' },
+    legend: { bottom: 0, textStyle: { color: DIM }, itemWidth: 14, itemHeight: 8 },
+    graphic: [
+      { type: 'text', left: 'center', top: '38%', style: { text: '318 个\n原创 py', fill: '#e6f9ff', fontSize: 20, fontWeight: 700, textAlign: 'center', lineHeight: 26 } },
+      { type: 'text', left: 'center', top: '52%', style: { text: '4 大类', fill: CYAN, fontSize: 13, textAlign: 'center' } }
+    ],
+    series: [{
+      type: 'pie', radius: ['34%', '68%'], center: ['50%', '46%'], padAngle: 3,
+      itemStyle: { borderRadius: 10, borderColor: DARK, borderWidth: 3 },
+      label: { color: TEXT, fontSize: 12, formatter: '{b}\n{c} 个' },
+      labelLine: { lineStyle: { color: 'rgba(0,240,255,0.45)' } },
+      data: [
+        { value: 110, name: '汉字编码与模型研究', itemStyle: { color: CYAN } },
+        { value: 88, name: '个人工具脚本', itemStyle: { color: PURPLE } },
+        { value: 8, name: '个人归档与桌面', itemStyle: { color: PINK } },
+        { value: 112, name: '过程版本与变体', itemStyle: { color: '#22d3ee' } }
+      ]
+    }]
+  });
+
+  /* 4. HZK32 点阵进度环 */
+  const hzk = echarts.init(document.getElementById('chart-hzk'));
+  hzk.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}：{c} 点（{d}%）' },
+    graphic: [
+      { type: 'text', left: 'center', top: '34%', style: { text: '「中」字活跃度', fill: '#e6f9ff', fontSize: 15, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '44%', style: { text: '17.6%', fill: CYAN, fontSize: 40, fontWeight: 800, textAlign: 'center' } },
+      { type: 'text', left: 'center', top: '58%', style: { text: '180 / 1024 活跃点', fill: DIM, fontSize: 13, textAlign: 'center' } }
+    ],
+    series: [{
+      type: 'pie',
+      radius: ['30%', '58%'],
+      center: ['50%', '46%'],
+      padAngle: 2,
+      itemStyle: { borderRadius: 8, borderColor: DARK, borderWidth: 3 },
+      label: { show: false },
+      data: [
+        { value: 180, name: '活跃点', itemStyle: { color: CYAN } },
+        { value: 844, name: '空白点', itemStyle: { color: 'rgba(127,148,181,0.18)' } }
+      ]
+    }]
+  });
+
+  /* 5. 仓库仪表盘（0 star 基线） */
+  function repoChart(el) {
+    const c = echarts.init(el);
+    c.setOption({
+      series: [{
+        type: 'gauge', min: 0, max: 10, splitNumber: 0, radius: '100%', center: ['50%', '50%'],
+        startAngle: 210, endAngle: -30,
+        progress: { show: true, width: 8, itemStyle: { color: 'rgba(0,240,255,0.25)' } },
+        axisLine: { lineStyle: { width: 8, color: [[1, 'rgba(127,148,181,0.15)']] } },
+        axisTick: { show: false }, splitLine: { show: false }, pointer: { show: false }, anchor: { show: false },
+        axisLabel: { show: false },
+        detail: { valueAnimation: true, formatter: '0', color: CYAN, fontSize: 26, fontWeight: 700, offsetCenter: [0, '42%'] },
+        title: { show: true, offsetCenter: [0, '78%'], color: DIM, fontSize: 11 },
+        data: [{ value: 0, name: 'star' }]
+      }]
+    });
+    return c;
+  }
+  repoChart(document.getElementById('chart-repo1'));
+  repoChart(document.getElementById('chart-repo2'));
+  repoChart(document.getElementById('chart-repo3'));
+
+  window.addEventListener('resize', () => {
+    [family, ppl, shape, encode, novel, pycat, hzk].forEach(c => c.resize());
+    document.querySelectorAll('#chart-repo1,#chart-repo2,#chart-repo3').forEach(el => echarts.getInstanceByDom(el)?.resize());
+  });
+</script>
+</body>
+</html>
