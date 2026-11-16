@@ -1,0 +1,4 @@
+numpy>=1.24
+torch>=2.0
+# 可选：TensorFlow 版嵌入层需要
+# tensorflow>=2.12
